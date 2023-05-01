@@ -1,0 +1,6 @@
+// Hint files help the Visual Studio IDE interpret Visual C++ identifiers
+// such as names of functions and macros.
+// For more information see https://go.microsoft.com/fwlink/?linkid=865984
+#define PLUGIN_API
+#define SMTG_OVERRIDE
+#define DELEGATE_REFCOUNT(ClassName) public: virtual ::Steinberg::uint32 PLUGIN_API addRef () SMTG_OVERRIDE { return ClassName::addRef (); } virtual ::Steinberg::uint32 PLUGIN_API release () SMTG_OVERRIDE { return ClassName::release (); }
