@@ -8,4 +8,4 @@ To control what happens when *SustainPedal* receives a MIDI note-on event for a 
 
 *SustainPedal* listens to all 16 MIDI channels independently, interpreting their sustain pedal events and delaying their note-off events accordingly. The condition of all 16 sustain pedals is reported as automation parameters named **Pedal1** through **Pedal16**.
 
-Since *SustainPedal* is a VST3, it ignores (and does not resend) incoming MIDI CC messages other than notes (including note pressure and note expression events). To ensure your instrument gets such events, you should therefore create a separate MIDI route for them in your DAW (and remember to filter out note events and sustain pedal events).
+Since *SustainPedal* is a VST3, it ignores (and does not resend) incoming MIDI CC messages other than notes (including note pressure and note expression events). To ensure your instrument gets any non-note events you may want it to receive, you should therefore create a separate MIDI route for those events in your DAW (and remember to filter out note events and sustain pedal events from it, since those are handled by the route coming from *SustainPedal*).
