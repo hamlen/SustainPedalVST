@@ -91,7 +91,7 @@ tresult PLUGIN_API SustainPedalController::getMidiControllerAssignment(int32 bus
 	LOG("SustainPedalController::getMidiControllerAssignment called.\n");
 	if (busIndex == 0 && midiControllerNumber == kCtrlSustainOnOff && 0 <= midiChannel && midiChannel < 16)
 	{
-		tag = midiChannel + 1;
+		tag = kPedal1 + midiChannel;
 		LOG("SustainPedalController::getMidiControllerAssignment exited normally.\n");
 		return kResultTrue;
 	}

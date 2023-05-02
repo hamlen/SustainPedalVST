@@ -171,7 +171,7 @@ void SustainPedal::pedal_on(int32 channel, IParameterChanges* params_out, int32 
 		state[channel].pedal_on = true;
 		state[channel].note_sus[0] = state[channel].note_on[0];
 		state[channel].note_sus[1] = state[channel].note_on[1];
-		addParamChange(channel + 1, params_out, sampleOffset, true);
+		addParamChange(kPedal1 + channel, params_out, sampleOffset, true);
 	}
 }
 
@@ -194,7 +194,7 @@ void SustainPedal::pedal_off(int32 channel, IEventList* events_out, TQuarterNote
 		}
 		state[channel].note_sus[0] = 0;
 		state[channel].note_sus[1] = 0;
-		addParamChange(channel + 1, params_out, sampleOffset, false);
+		addParamChange(kPedal1 + channel, params_out, sampleOffset, false);
 	}
 }
 
@@ -296,7 +296,7 @@ tresult PLUGIN_API SustainPedal::process(ProcessData& data)
 			else if (value > 0.)
 			{
 				// pedal on
-				pedal_on(nextId - 1, params_out, nextSampleOffset);
+				pedal_on(nextId - kPedal1, params_out, nextSampleOffset);
 			}
 			else
 			{
@@ -306,7 +306,7 @@ tresult PLUGIN_API SustainPedal::process(ProcessData& data)
 				constexpr uint32 flags = ProcessContext::kProjectTimeMusicValid | ProcessContext::kTempoValid;
 				if (ctx && ctx->sampleRate > 0. && (data.processContext->state & flags) == flags)
 					pos = ctx->projectTimeMusic + nextSampleOffset / (ctx->sampleRate * 60.) * ctx->tempo;
-				const int32 c = nextId - 1;
+				const int32 c = nextId - kPedal1;
 				if (nextSampleOffset > nextUnusedSampleOffset[c])
 					nextUnusedSampleOffset[c] = nextSampleOffset;
 				pedal_off(c, events_out, pos, params_out, nextUnusedSampleOffset[c]);
