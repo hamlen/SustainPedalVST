@@ -71,8 +71,8 @@ protected:
 	void addParamChange(ParamID id, IParameterChanges* params_out, int32 sampleOffset, bool value);
 	void pedal_on(int32 channel, IParameterChanges* params_out, int32 sampleOffset);
 	void pedal_off(int32 channel, IEventList* events_out, TQuarterNotes pos, IParameterChanges* params_out, int32 sampleOffset);
-	channel_state state[16] = {};
 	bool retrigger = true;
+	channel_state state[16] = {};
 };
 
 #ifdef LOGGING

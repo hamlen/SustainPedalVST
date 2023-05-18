@@ -72,15 +72,16 @@ tresult PLUGIN_API SustainPedalController::setComponentState(IBStream* state)
 	}
 
 	IBStreamer streamer(state, kLittleEndian);
-	float values[kNumParams];
-	if (streamer.readFloatArray(values, kNumParams) == false)
+	for (uint32 i = 0; i < kNumParams; ++i)
 	{
-		LOG("SustainPedalController::setComponentState failed due to streamer error.\n");
-		return kResultFalse;
+		bool val;
+		if (!streamer.readBool(val))
+		{
+			LOG("SustainPedalController::setComponentState failed due to streamer error.\n");
+			return kResultFalse;
+		}
+		setParamNormalized(i, val ? 1. : 0.);
 	}
-
-	for (int16 i = 0; i < kNumParams; ++i)
-		setParamNormalized(i, values[i]);
 
 	LOG("SustainPedalController::setComponentState exited normally.\n");
 	return kResultOk;
