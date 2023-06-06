@@ -83,19 +83,6 @@ tresult PLUGIN_API SustainPedal::setState(IBStream* s)
 	}
 	retrigger = val ? 1. : 0.;
 
-	for (int32 i = 0; i < 16; ++i)
-	{
-		if (!streamer.readBool(val))
-		{
-			LOG("SustainPedal::setState failed due to streamer error.\n");
-			return kResultFalse;
-		}
-		if (val)
-			pedal_on(i, nullptr, 0);
-		else
-			pedal_off(i, nullptr, 0., nullptr, 0);
-	}
-
 	LOG("SustainPedal::setState exited successfully.\n");
 	return kResultOk;
 }
@@ -105,19 +92,10 @@ tresult PLUGIN_API SustainPedal::getState(IBStream* s)
 	LOG("SustainPedal::getState called.\n");
 
 	IBStreamer streamer(s, kLittleEndian);
-	if (!streamer.writeBool(retrigger))
+	if (!streamer.writeBool(retrigger ? 0. : 1.))
 	{
 		LOG("SustainPedal::getState failed due to streamer error.\n");
 		return kResultFalse;
-	}
-
-	for (int32 i = 0; i < 16; ++i)
-	{
-		if (!streamer.writeBool(state[i].pedal_on))
-		{
-			LOG("SustainPedal::getState failed due to streamer error.\n");
-			return kResultFalse;
-		}
 	}
 
 	LOG("SustainPedal::getState exited successfully.\n");

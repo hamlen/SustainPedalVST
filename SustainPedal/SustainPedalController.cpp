@@ -32,23 +32,23 @@ tresult PLUGIN_API SustainPedalController::initialize(FUnknown* context)
 		return result;
 	}
 
-	parameters.addParameter(STR16("Retrigger"), nullptr, 1, 1., ParameterInfo::kCanAutomate, SustainPedalParams::kRetrigger);
-	parameters.addParameter(STR16("Pedal1"), nullptr, 1, 0., ParameterInfo::kCanAutomate, SustainPedalParams::kPedal1);
-	parameters.addParameter(STR16("Pedal2"), nullptr, 1, 0., ParameterInfo::kCanAutomate, SustainPedalParams::kPedal2);
-	parameters.addParameter(STR16("Pedal3"), nullptr, 1, 0., ParameterInfo::kCanAutomate, SustainPedalParams::kPedal3);
-	parameters.addParameter(STR16("Pedal4"), nullptr, 1, 0., ParameterInfo::kCanAutomate, SustainPedalParams::kPedal4);
-	parameters.addParameter(STR16("Pedal5"), nullptr, 1, 0., ParameterInfo::kCanAutomate, SustainPedalParams::kPedal5);
-	parameters.addParameter(STR16("Pedal6"), nullptr, 1, 0., ParameterInfo::kCanAutomate, SustainPedalParams::kPedal6);
-	parameters.addParameter(STR16("Pedal7"), nullptr, 1, 0., ParameterInfo::kCanAutomate, SustainPedalParams::kPedal7);
-	parameters.addParameter(STR16("Pedal8"), nullptr, 1, 0., ParameterInfo::kCanAutomate, SustainPedalParams::kPedal8);
-	parameters.addParameter(STR16("Pedal9"), nullptr, 1, 0., ParameterInfo::kCanAutomate, SustainPedalParams::kPedal9);
-	parameters.addParameter(STR16("Pedal10"), nullptr, 1, 0., ParameterInfo::kCanAutomate, SustainPedalParams::kPedal10);
-	parameters.addParameter(STR16("Pedal11"), nullptr, 1, 0., ParameterInfo::kCanAutomate, SustainPedalParams::kPedal11);
-	parameters.addParameter(STR16("Pedal12"), nullptr, 1, 0., ParameterInfo::kCanAutomate, SustainPedalParams::kPedal12);
-	parameters.addParameter(STR16("Pedal13"), nullptr, 1, 0., ParameterInfo::kCanAutomate, SustainPedalParams::kPedal13);
-	parameters.addParameter(STR16("Pedal14"), nullptr, 1, 0., ParameterInfo::kCanAutomate, SustainPedalParams::kPedal14);
-	parameters.addParameter(STR16("Pedal15"), nullptr, 1, 0., ParameterInfo::kCanAutomate, SustainPedalParams::kPedal15);
-	parameters.addParameter(STR16("Pedal16"), nullptr, 1, 0., ParameterInfo::kCanAutomate, SustainPedalParams::kPedal16);
+	parameters.addParameter(STR16("Retrigger"), nullptr, 1, 1., ParameterInfo::kCanAutomate, kRetrigger);
+	parameters.addParameter(STR16("Pedal1"), nullptr, 1, 0., ParameterInfo::kCanAutomate, kPedal1);
+	parameters.addParameter(STR16("Pedal2"), nullptr, 1, 0., ParameterInfo::kCanAutomate, kPedal2);
+	parameters.addParameter(STR16("Pedal3"), nullptr, 1, 0., ParameterInfo::kCanAutomate, kPedal3);
+	parameters.addParameter(STR16("Pedal4"), nullptr, 1, 0., ParameterInfo::kCanAutomate, kPedal4);
+	parameters.addParameter(STR16("Pedal5"), nullptr, 1, 0., ParameterInfo::kCanAutomate, kPedal5);
+	parameters.addParameter(STR16("Pedal6"), nullptr, 1, 0., ParameterInfo::kCanAutomate, kPedal6);
+	parameters.addParameter(STR16("Pedal7"), nullptr, 1, 0., ParameterInfo::kCanAutomate, kPedal7);
+	parameters.addParameter(STR16("Pedal8"), nullptr, 1, 0., ParameterInfo::kCanAutomate, kPedal8);
+	parameters.addParameter(STR16("Pedal9"), nullptr, 1, 0., ParameterInfo::kCanAutomate, kPedal9);
+	parameters.addParameter(STR16("Pedal10"), nullptr, 1, 0., ParameterInfo::kCanAutomate, kPedal10);
+	parameters.addParameter(STR16("Pedal11"), nullptr, 1, 0., ParameterInfo::kCanAutomate, kPedal11);
+	parameters.addParameter(STR16("Pedal12"), nullptr, 1, 0., ParameterInfo::kCanAutomate, kPedal12);
+	parameters.addParameter(STR16("Pedal13"), nullptr, 1, 0., ParameterInfo::kCanAutomate, kPedal13);
+	parameters.addParameter(STR16("Pedal14"), nullptr, 1, 0., ParameterInfo::kCanAutomate, kPedal14);
+	parameters.addParameter(STR16("Pedal15"), nullptr, 1, 0., ParameterInfo::kCanAutomate, kPedal15);
+	parameters.addParameter(STR16("Pedal16"), nullptr, 1, 0., ParameterInfo::kCanAutomate, kPedal16);
 
 	LOG("SustainPedalController::initialize exited normally with code %d.\n", result);
 	return result;
@@ -72,16 +72,13 @@ tresult PLUGIN_API SustainPedalController::setComponentState(IBStream* state)
 	}
 
 	IBStreamer streamer(state, kLittleEndian);
-	for (uint32 i = 0; i < kNumParams; ++i)
+	bool val;
+	if (!streamer.readBool(val))
 	{
-		bool val;
-		if (!streamer.readBool(val))
-		{
-			LOG("SustainPedalController::setComponentState failed due to streamer error.\n");
-			return kResultFalse;
-		}
-		setParamNormalized(i, val ? 1. : 0.);
+		LOG("SustainPedalController::setComponentState failed due to streamer error.\n");
+		return kResultFalse;
 	}
+	setParamNormalized(kRetrigger, val ? 1. : 0.);
 
 	LOG("SustainPedalController::setComponentState exited normally.\n");
 	return kResultOk;
