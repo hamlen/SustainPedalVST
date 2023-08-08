@@ -18,13 +18,13 @@ SustainPedalController::~SustainPedalController(void)
 tresult PLUGIN_API SustainPedalController::queryInterface(const char* iid, void** obj)
 {
 	QUERY_INTERFACE(iid, obj, IMidiMapping::iid, IMidiMapping)
-	return EditController::queryInterface(iid, obj);
+	return EditControllerEx1::queryInterface(iid, obj);
 }
 
 tresult PLUGIN_API SustainPedalController::initialize(FUnknown* context)
 {
 	LOG("SustainPedalController::initialize called.\n");
-	tresult result = EditController::initialize(context);
+	tresult result = EditControllerEx1::initialize(context);
 
 	if (result != kResultOk)
 	{
@@ -33,22 +33,43 @@ tresult PLUGIN_API SustainPedalController::initialize(FUnknown* context)
 	}
 
 	parameters.addParameter(STR16("Retrigger"), nullptr, 1, 1., ParameterInfo::kCanAutomate, kRetrigger);
-	parameters.addParameter(STR16("Pedal1"), nullptr, 1, 0., ParameterInfo::kCanAutomate, kPedal1);
-	parameters.addParameter(STR16("Pedal2"), nullptr, 1, 0., ParameterInfo::kCanAutomate, kPedal2);
-	parameters.addParameter(STR16("Pedal3"), nullptr, 1, 0., ParameterInfo::kCanAutomate, kPedal3);
-	parameters.addParameter(STR16("Pedal4"), nullptr, 1, 0., ParameterInfo::kCanAutomate, kPedal4);
-	parameters.addParameter(STR16("Pedal5"), nullptr, 1, 0., ParameterInfo::kCanAutomate, kPedal5);
-	parameters.addParameter(STR16("Pedal6"), nullptr, 1, 0., ParameterInfo::kCanAutomate, kPedal6);
-	parameters.addParameter(STR16("Pedal7"), nullptr, 1, 0., ParameterInfo::kCanAutomate, kPedal7);
-	parameters.addParameter(STR16("Pedal8"), nullptr, 1, 0., ParameterInfo::kCanAutomate, kPedal8);
-	parameters.addParameter(STR16("Pedal9"), nullptr, 1, 0., ParameterInfo::kCanAutomate, kPedal9);
-	parameters.addParameter(STR16("Pedal10"), nullptr, 1, 0., ParameterInfo::kCanAutomate, kPedal10);
-	parameters.addParameter(STR16("Pedal11"), nullptr, 1, 0., ParameterInfo::kCanAutomate, kPedal11);
-	parameters.addParameter(STR16("Pedal12"), nullptr, 1, 0., ParameterInfo::kCanAutomate, kPedal12);
-	parameters.addParameter(STR16("Pedal13"), nullptr, 1, 0., ParameterInfo::kCanAutomate, kPedal13);
-	parameters.addParameter(STR16("Pedal14"), nullptr, 1, 0., ParameterInfo::kCanAutomate, kPedal14);
-	parameters.addParameter(STR16("Pedal15"), nullptr, 1, 0., ParameterInfo::kCanAutomate, kPedal15);
-	parameters.addParameter(STR16("Pedal16"), nullptr, 1, 0., ParameterInfo::kCanAutomate, kPedal16);
+
+	addUnit(new Unit(STR16("Sustain Pedals"), kSustainUnitId));
+	addUnit(new Unit(STR16("Sostenuto Pedals"), kSostenutoUnitId));
+
+	{
+		TChar sustain_name[] = STR16("Sustain0\0");
+		TChar* sustain_name_suffix = sustain_name + (sizeof("Sustain") - 1);
+		for (int32 i = 0; i < 16; ++i)
+		{
+			if (*sustain_name_suffix < u'9')
+				++*sustain_name_suffix;
+			else
+			{
+				*sustain_name_suffix++ = u'1';
+				*sustain_name_suffix = u'0';
+			}
+			parameters.addParameter(sustain_name, nullptr, 1, 0., ParameterInfo::kCanAutomate, kSustain1 + i, kSustainUnitId);
+		}
+	}
+
+	{
+		TChar sostenuto_name[] = STR16("Sostenuto0\0");
+		TChar* sostenuto_name_suffix = sostenuto_name + (sizeof("Sostenuto") - 1);
+		for (int32 i = 0; i < 16; ++i)
+		{
+			if (*sostenuto_name_suffix < u'9')
+				++*sostenuto_name_suffix;
+			else
+			{
+				*sostenuto_name_suffix++ = u'1';
+				*sostenuto_name_suffix = u'0';
+			}
+			parameters.addParameter(sostenuto_name, nullptr, 1, 0., ParameterInfo::kCanAutomate, kSostenuto1 + i, kSostenutoUnitId);
+		}
+	}
+
+	parameters.addParameter(STR16("Bypass"), nullptr, 1, 0., ParameterInfo::kIsBypass, kBypass);
 
 	LOG("SustainPedalController::initialize exited normally with code %d.\n", result);
 	return result;
@@ -57,7 +78,7 @@ tresult PLUGIN_API SustainPedalController::initialize(FUnknown* context)
 tresult PLUGIN_API SustainPedalController::terminate()
 {
 	LOG("SustainPedalController::terminate called.\n");
-	tresult result = EditController::terminate();
+	tresult result = EditControllerEx1::terminate();
 	LOG("SustainPedalController::terminate exited with code %d.\n", result);
 	return result;
 }
@@ -87,9 +108,9 @@ tresult PLUGIN_API SustainPedalController::setComponentState(IBStream* state)
 tresult PLUGIN_API SustainPedalController::getMidiControllerAssignment(int32 busIndex, int16 midiChannel, CtrlNumber midiControllerNumber, ParamID& tag)
 {
 	LOG("SustainPedalController::getMidiControllerAssignment called.\n");
-	if (busIndex == 0 && midiControllerNumber == kCtrlSustainOnOff && 0 <= midiChannel && midiChannel < 16)
+	if (busIndex == 0 && (midiControllerNumber == kCtrlSustainOnOff || midiControllerNumber == kCtrlSustenutoOnOff) && 0 <= midiChannel && midiChannel < 16)
 	{
-		tag = kPedal1 + midiChannel;
+		tag = ((midiControllerNumber == kCtrlSustainOnOff) ? kSustain1 : kSostenuto1) + midiChannel;
 		LOG("SustainPedalController::getMidiControllerAssignment exited normally.\n");
 		return kResultTrue;
 	}

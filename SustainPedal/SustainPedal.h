@@ -2,6 +2,16 @@
 
 #undef LOGGING
 
+/* Mechanical sostenuto pedals lock all dampers in raised positions (even for unpressed keys)
+ * if pressed while the sustain pedal is already down, making the sostenuto pedal temporarily
+ * act like a sustain pedal.  Since this is usually undesired, pianists usually avoid pressing
+ * the sostenuto pedal while the sustain pedal is down.  In this plug-in, I have chosen NOT to
+ * implement that undesired behavior.  Pressing the sostenuto pedal while the sustain pedal is
+ * down instead locks only the dampers for the currently pressed keys, just like when the
+ * sustain pedal is not down.  If you really want the mechanical behavior, change the #undef
+ * in the following line to a #define. */
+#undef SOS_WITH_SUS_SUSTAINS_ALL
+
 #include "public.sdk/source/vst/vsteditcontroller.h"
 #include "public.sdk/source/vst/vstaudioeffect.h"
 #include "pluginterfaces/vst/ivstevents.h"
@@ -11,36 +21,57 @@
 using namespace Steinberg;
 using namespace Steinberg::Vst;
 
-// Parameter enumeration
+static const FUID SustainPedalProcessorUID(0x152C7B8D, 0x71604051, 0x8FD3A939, 0x17EB5368);
+
 enum SustainPedalParams : Steinberg::Vst::ParamID
 {
 	kRetrigger = 0,
-	kPedal1 = 1,
-	kPedal2 = 2,
-	kPedal3 = 3,
-	kPedal4 = 4,
-	kPedal5 = 5,
-	kPedal6 = 6,
-	kPedal7 = 7,
-	kPedal8 = 8,
-	kPedal9 = 9,
-	kPedal10 = 10,
-	kPedal11 = 11,
-	kPedal12 = 12,
-	kPedal13 = 13,
-	kPedal14 = 14,
-	kPedal15 = 15,
-	kPedal16 = 16,
-	kNumParams = 17
+	kSustain1 = 1,
+	kSustain2 = 2,
+	kSustain3 = 3,
+	kSustain4 = 4,
+	kSustain5 = 5,
+	kSustain6 = 6,
+	kSustain7 = 7,
+	kSustain8 = 8,
+	kSustain9 = 9,
+	kSustain10 = 10,
+	kSustain11 = 11,
+	kSustain12 = 12,
+	kSustain13 = 13,
+	kSustain14 = 14,
+	kSustain15 = 15,
+	kSustain16 = 16,
+	kSostenuto1 = 17,
+	kSostenuto2 = 18,
+	kSostenuto3 = 19,
+	kSostenuto4 = 20,
+	kSostenuto5 = 21,
+	kSostenuto6 = 22,
+	kSostenuto7 = 23,
+	kSostenuto8 = 24,
+	kSostenuto9 = 25,
+	kSostenuto10 = 26,
+	kSostenuto11 = 27,
+	kSostenuto12 = 28,
+	kSostenuto13 = 29,
+	kSostenuto14 = 30,
+	kSostenuto15 = 31,
+	kSostenuto16 = 32,
+	kBypass = 33,
+	kNumParams = 34
 };
 
-// Plugin processor GUID - must be unique
-static const FUID SustainPedalProcessorUID(0x152C7B8D, 0x71604051, 0x8FD3A939, 0x17EB5368);
-
 typedef struct {
-	uint64 note_on[2], note_sus[2];
+	uint64 note_on[2];			// bitfield: 1 = key is currently pressed
+	uint64 note_sustain[2];		// bitfield: 1 = key was last pressed with damper pedal down
+	uint64 note_sostenuto[2];	// bitfield: 1 = sostenuto was pressed while key down
+	uint64 release_pending[2];	// bitfield: 1 = send note-off when next possible
 	Event last_event[128];
-	bool pedal_on;
+	bool sustain_on, sostenuto_on;
+#ifdef SOS_WITH_SUS_SUSTAINS_ALL
+	bool sostenuto_all;			// sostenuto was last pressed while damper pedal down
+#endif
 } channel_state;
 
 class SustainPedal : public AudioEffect
@@ -63,16 +94,20 @@ public:
 	tresult PLUGIN_API setIoMode(IoMode mode);
 	tresult PLUGIN_API setState(IBStream* state);
 	tresult PLUGIN_API getState(IBStream* state);
-	tresult PLUGIN_API setBusArrangements(SpeakerArrangement* inputs, int32 numIns, SpeakerArrangement* outputs, int32 numOuts);
 	tresult PLUGIN_API canProcessSampleSize(int32 symbolicSampleSize);
 	~SustainPedal(void);
 
 protected:
-	void addParamChange(ParamID id, IParameterChanges* params_out, int32 sampleOffset, bool value);
-	void pedal_on(int32 channel, IParameterChanges* params_out, int32 sampleOffset);
-	void pedal_off(int32 channel, IEventList* events_out, TQuarterNotes pos, IParameterChanges* params_out, int32 sampleOffset);
-	bool retrigger = true;
+	void send_note_offs(int32 channel, IEventList* events_out, const uint64 release_mask[2], TQuarterNotes pos, int32 sampleOffset);
+	void sustain_on(int32 channel, int32 sampleOffset);
+	void sustain_off(int32 channel, IEventList* events_out, TQuarterNotes pos, int32 sampleOffset);
+	void sostenuto_on(int32 channel, int32 sampleOffset);
+	void sostenuto_off(int32 channel, IEventList* events_out, TQuarterNotes pos, int32 sampleOffset);
+	void bypass_on(IEventList* const events_out, ProcessContext* const ctx, int32 sampleOffset);
+
 	channel_state state[16] = {};
+	bool retrigger = true;
+	bool bypass = false;
 };
 
 #ifdef LOGGING
