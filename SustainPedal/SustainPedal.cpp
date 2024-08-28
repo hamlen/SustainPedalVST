@@ -287,23 +287,20 @@ tresult PLUGIN_API SustainPedal::process(ProcessData& data)
 
 	// We shouldn't be asked for audio output, but process it anyway (emit silence) to accommodate uncompliant hosts.
 	const bool is32bit = (data.symbolicSampleSize == kSample32);
-	if (is32bit || (data.symbolicSampleSize == kSample64))
+	const size_t buffersize = data.numSamples * (is32bit ? sizeof(Sample32) : sizeof(Sample64));
+	if ((is32bit || (data.symbolicSampleSize == kSample64)) && buffersize > 0)
 	{
 		for (int32 i = 0; i < data.numOutputs; ++i)
 		{
 			for (int32 j = 0; j < data.outputs[i].numChannels; ++j)
 			{
-				void* buffer = is32bit ? (void*)data.outputs[i].channelBuffers32[j] : (void*)data.outputs[i].channelBuffers64[j];
-				if (buffer)
-					memset(buffer, 0, data.numSamples * (is32bit ? sizeof(*data.outputs[i].channelBuffers32[j]) : sizeof(*data.outputs[i].channelBuffers64[j])));
+				if (void* buffer = is32bit ? (void*)data.outputs[i].channelBuffers32[j] : (void*)data.outputs[i].channelBuffers64[j])
+					memset(buffer, 0, buffersize);
 			}
 		}
 	}
 	for (int32 i = 0; i < data.numOutputs; ++i)
-		data.outputs[i].silenceFlags = (1ULL << data.outputs[i].numChannels) - 1;
-
-	if (data.numSamples <= 0)
-		return kResultTrue;
+		data.outputs[i].silenceFlags = (1ULL << data.outputs[i].numChannels) - 1ULL;
 
 	IParameterChanges* const params_in = data.inputParameterChanges;
 	IEventList* const events_in = data.inputEvents;
@@ -346,6 +343,7 @@ tresult PLUGIN_API SustainPedal::process(ProcessData& data)
 		}
 	}
 
+	const int32 numSamples = (data.numSamples <= 0) ? 1 : data.numSamples; // for hosts that flush parameters using numSamples=0
 	int32 pindex[kNumParams] = {};
 	int32 eindex = 0;
 	int32 prevOutOffset = -1;
@@ -365,16 +363,16 @@ tresult PLUGIN_API SustainPedal::process(ProcessData& data)
 				continue;
 			if (evt.sampleOffset < 0)
 				evt.sampleOffset = 0; // should never happen (host served bad time index)
-			else if (evt.sampleOffset >= data.numSamples)
-				evt.sampleOffset = data.numSamples - 1; // should never happen (host served bad time index)
+			else if (evt.sampleOffset >= numSamples)
+				evt.sampleOffset = numSamples - 1;
 
 			if (evt.type == Event::kNoteOnEvent)
 			{
 				const int32 t = evt.sampleOffset;
 				const uint16 c = (uint16)evt.noteOn.channel % 16;
 				const uint16 p = (uint16)evt.noteOn.pitch % 128;
-				if (concurrent_event(Event::kNoteOffEvent, events_in, eindex, -1, t, c, p, data.numSamples) ||
-					concurrent_event(Event::kNoteOffEvent, events_in, eindex, numEvents, t, c, p, data.numSamples))
+				if (concurrent_event(Event::kNoteOffEvent, events_in, eindex, -1, t, c, p, numSamples) ||
+					concurrent_event(Event::kNoteOffEvent, events_in, eindex, numEvents, t, c, p, numSamples))
 					continue;
 			}
 
@@ -401,7 +399,7 @@ tresult PLUGIN_API SustainPedal::process(ProcessData& data)
 				ParamValue v;
 				int32 o;
 				paramQueue[i]->getPoint(pindex[i], o, v);
-				if (o < 0) o = 0; else if (o >= data.numSamples) o = data.numSamples - 1;
+				if (o < 0) o = 0; else if (o >= numSamples) o = numSamples - 1;
 				if ((o < sampleOffset) || (((i == kRetrigger) && (o == sampleOffset))))
 				{
 					sampleOffset = o;
@@ -418,7 +416,7 @@ tresult PLUGIN_API SustainPedal::process(ProcessData& data)
 			if ((changedParamID != kRetrigger) && (retrigger || pending_releases_flushed))
 				outOffsetBias = 1;
 		}
-		if ((prevOutOffset < sampleOffset - 1) || (sampleOffset + outOffsetBias >= data.numSamples))
+		if ((prevOutOffset < sampleOffset - 1) || (sampleOffset + outOffsetBias >= numSamples))
 		{
 			// As soon as there's an unused time offset in the buffer, return to time-preserving output.
 			outOffsetBias = 0;
@@ -495,7 +493,7 @@ tresult PLUGIN_API SustainPedal::process(ProcessData& data)
 				// doesn't make sense to treat them as separate anyway, so in such unusual cases
 				// we simply skip the retrigger (i.e., ignore the second note-on).
 				if (sounding && retrigger && events_out && (evt.sampleOffset > 0) &&
-					!concurrent_event(Event::kNoteOnEvent, events_out, events_out->getEventCount(), -1, evt.sampleOffset - 1, channel, pitch, data.numSamples))
+					!concurrent_event(Event::kNoteOnEvent, events_out, events_out->getEventCount(), -1, evt.sampleOffset - 1, channel, pitch, numSamples))
 				{
 					state[channel].note_on[phi] &= ~pmask;
 					if (!state[channel].sustain_on)
@@ -507,7 +505,7 @@ tresult PLUGIN_API SustainPedal::process(ProcessData& data)
 					--e_off.sampleOffset;
 					e_off.noteOff.channel = channel;
 					e_off.noteOff.pitch = pitch;
-					e_off.noteOff.velocity = 127;
+					e_off.noteOff.velocity = 64;
 					e_off.noteOff.noteId = state[channel].last_event[pitch].noteOn.noteId;
 					e_off.noteOff.tuning = state[channel].last_event[pitch].noteOn.tuning;
 					events_out->addEvent(e_off);
