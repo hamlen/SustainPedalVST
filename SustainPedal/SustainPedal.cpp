@@ -1,3 +1,6 @@
+#include "SustainPedal.h"
+#include "SustainPedalController.h"
+
 #include "public.sdk/source/vst/vstaudioprocessoralgo.h"
 
 #include "pluginterfaces/vst/ivstevents.h"
@@ -5,9 +8,6 @@
 #include "pluginterfaces/vst/ivstprocesscontext.h"
 #include "pluginterfaces/base/ibstream.h"
 #include "base/source/fstreamer.h"
-
-#include "SustainPedal.h"
-#include "SustainPedalController.h"
 
 SustainPedal::SustainPedal(void)
 {
@@ -278,6 +278,7 @@ static bool concurrent_event(const uint16 type, IEventList* const q, int32 index
 				return true;
 		}
 	}
+	return false;
 }
 
 tresult PLUGIN_API SustainPedal::process(ProcessData& data)

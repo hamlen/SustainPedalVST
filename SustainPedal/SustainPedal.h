@@ -1,7 +1,5 @@
 #pragma once
 
-#undef LOGGING
-
 /* Mechanical sostenuto pedals lock all dampers in raised positions (even for unpressed keys)
  * if pressed while the sustain pedal is already down, making the sostenuto pedal temporarily
  * act like a sustain pedal.  Since this is usually undesired, pianists usually avoid pressing
@@ -12,11 +10,8 @@
  * in the following line to a #define. */
 #undef SOS_WITH_SUS_SUSTAINS_ALL
 
-#include "public.sdk/source/vst/vsteditcontroller.h"
 #include "public.sdk/source/vst/vstaudioeffect.h"
 #include "pluginterfaces/vst/ivstevents.h"
-#include "base/source/fstring.h"
-#include "pluginterfaces/base/funknown.h"
 
 using namespace Steinberg;
 using namespace Steinberg::Vst;
@@ -110,8 +105,9 @@ protected:
 	bool bypass = false;
 };
 
+#include "log.h"
 #ifdef LOGGING
-	void log(const char* format, ...);
+void log(const char* format, ...);
 #	define LOG(format, ...) log((format), __VA_ARGS__)
 #else
 #	define LOG(format, ...) 0

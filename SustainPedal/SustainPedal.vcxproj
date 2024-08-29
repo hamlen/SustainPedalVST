@@ -170,6 +170,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="log.h" />
     <ClInclude Include="SustainPedal.h" />
     <ClInclude Include="SustainPedalController.h" />
   </ItemGroup>
