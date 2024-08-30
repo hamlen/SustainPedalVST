@@ -1,6 +1,8 @@
 #include "SustainPedal.h"
 #include "SustainPedalController.h"
 
+#include <bit>
+
 #include "public.sdk/source/vst/vstaudioprocessoralgo.h"
 
 #include "pluginterfaces/vst/ivstevents.h"
@@ -135,12 +137,14 @@ tresult PLUGIN_API SustainPedal::getRoutingInfo(RoutingInfo& inInfo, RoutingInfo
 
 void SustainPedal::send_note_offs(int32 channel, IEventList* events_out, const uint64 release_mask[2], TQuarterNotes pos, int32 sampleOffset)
 {
-	for (uint16 i = 0; i < 128; ++i)
+	for (uint64 phi = 0; phi <= 1; ++phi)
 	{
-		const uint64 phi = i / 64;
-		const uint64 pmask = 1ULL << (i % 64);
-		if (release_mask[phi] & pmask)
+		uint64 rm = release_mask[phi];
+		while (rm)
 		{
+			uint16 i = std::bit_width(rm) - 1;
+			rm ^= 1ULL << i;
+			i += phi * (sizeof(*release_mask) * 8);
 			state[channel].last_event[i].sampleOffset = sampleOffset;
 			state[channel].last_event[i].ppqPosition = pos;
 			if (events_out)
@@ -156,7 +160,7 @@ void SustainPedal::send_note_offs(int32 channel, IEventList* events_out, const u
 	else
 	{
 		state[channel].release_pending[0] |= release_mask[0];
-		state[channel].release_pending[1] |= release_mask[0];
+		state[channel].release_pending[1] |= release_mask[1];
 	}
 }
 
