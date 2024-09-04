@@ -521,13 +521,14 @@ tresult PLUGIN_API SustainPedal::process(ProcessData& data)
 				{
 					if (events_out)
 						events_out->addEvent(evt);
-					state[channel].note_on[phi] |= pmask;
-					state[channel].last_event[pitch] = evt;
-					if (state[channel].sustain_on && !bypass)
-						state[channel].note_sustain[phi] |= pmask;
 					state[channel].release_pending[phi] &= ~pmask;
 					prevOutOffset = evt.sampleOffset;
 				}
+
+				state[channel].note_on[phi] |= pmask;
+				state[channel].last_event[pitch] = evt;
+				if (state[channel].sustain_on && !bypass)
+					state[channel].note_sustain[phi] |= pmask;
 
 #ifdef SOS_WITH_SUS_SUSTAINS_ALL
 				if (state[channel].sostenuto_all)
