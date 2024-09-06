@@ -58,11 +58,17 @@ enum SustainPedalParams : Steinberg::Vst::ParamID
 };
 
 typedef struct {
+	float tuning;
+	int32 noteId;
+} PrevEvent;
+
+typedef struct {
 	uint64 note_on[2];			// bitfield: 1 = key is currently pressed
 	uint64 note_sustain[2];		// bitfield: 1 = key was last pressed with damper pedal down
 	uint64 note_sostenuto[2];	// bitfield: 1 = sostenuto was pressed while key down
 	uint64 release_pending[2];	// bitfield: 1 = send note-off when next possible
-	Event last_event[128];
+	uint64 last_event_live[2];	// bitfield: 1 = last event had "live" flag set
+	PrevEvent last_event[128];
 	bool sustain_on, sostenuto_on;
 #ifdef SOS_WITH_SUS_SUSTAINS_ALL
 	bool sostenuto_all;			// sostenuto was last pressed while damper pedal down
