@@ -10,6 +10,7 @@
  * in the following line to a #define. */
 #undef SOS_WITH_SUS_SUSTAINS_ALL
 
+#include <bit>
 #include "public.sdk/source/vst/vstaudioeffect.h"
 #include "pluginterfaces/vst/ivstevents.h"
 
@@ -54,7 +55,24 @@ enum SustainPedalParams : Steinberg::Vst::ParamID
 	kSostenuto15 = 31,
 	kSostenuto16 = 32,
 	kBypass = 33,
-	kNumParams = 34
+	kReleaseMode = 34,
+	kNumParams = 35
+};
+
+struct Bits128 {
+	uint64 lo = 0, hi = 0;
+	Bits128() {}
+	Bits128(const unsigned char bit_index) { if (bit_index < 64) lo = 1ULL << bit_index; else hi = 1ULL << (bit_index - 64); }
+	unsigned char hibit() const { return hi ? (std::bit_width(hi) + 64) : std::bit_width(lo); }
+	Bits128& clear() { lo = hi = 0; return *this; }
+	Bits128& operator&=(const Bits128& y) { lo &= y.lo; hi &= y.hi; return *this; }
+	Bits128& operator|=(const Bits128& y) { lo |= y.lo; hi |= y.hi; return *this; }
+	Bits128& operator^=(const Bits128& y) { lo ^= y.lo; hi ^= y.hi; return *this; }
+	friend Bits128 operator&(Bits128 x, const Bits128& y) { return x &= y; }
+	friend Bits128 operator|(Bits128 x, const Bits128& y) { return x |= y; }
+	friend Bits128 operator^(Bits128 x, const Bits128& y) { return x ^= y; }
+	friend Bits128 operator~(Bits128 x) { x.lo = ~x.lo; x.hi = ~x.hi; return x; }
+	operator bool() { return lo || hi; }
 };
 
 typedef struct {
@@ -63,12 +81,13 @@ typedef struct {
 } PrevEvent;
 
 typedef struct {
-	uint64 note_on[2];			// bitfield: 1 = key is currently pressed
-	uint64 note_sustain[2];		// bitfield: 1 = key was last pressed with damper pedal down
-	uint64 note_sostenuto[2];	// bitfield: 1 = sostenuto was pressed while key down
-	uint64 release_pending[2];	// bitfield: 1 = send note-off when next possible
-	uint64 last_event_live[2];	// bitfield: 1 = last event had "live" flag set
+	Bits128 note_on;			// bitfield: 1 = key is currently pressed
+	Bits128 note_sustain;		// bitfield: 1 = key was last pressed with damper pedal down
+	Bits128 note_sostenuto;		// bitfield: 1 = sostenuto was pressed while key down
+	Bits128 release_pending;	// bitfield: 1 = send note-off when next possible
+	Bits128 last_event_live;	// bitfield: 1 = last event had "live" flag set
 	PrevEvent last_event[128];
+	unsigned char concurrent_noteons[128];
 	bool sustain_on, sostenuto_on;
 #ifdef SOS_WITH_SUS_SUSTAINS_ALL
 	bool sostenuto_all;			// sostenuto was last pressed while damper pedal down
@@ -99,7 +118,7 @@ public:
 	~SustainPedal(void);
 
 protected:
-	void send_note_offs(int32 channel, IEventList* events_out, const uint64 release_mask[2], TQuarterNotes pos, int32 sampleOffset);
+	void send_note_offs(int32 channel, IEventList* events_out, const Bits128& release_mask, TQuarterNotes pos, int32 sampleOffset);
 	void sustain_on(int32 channel, int32 sampleOffset);
 	void sustain_off(int32 channel, IEventList* events_out, TQuarterNotes pos, int32 sampleOffset);
 	void sostenuto_on(int32 channel, int32 sampleOffset);
@@ -108,6 +127,7 @@ protected:
 
 	channel_state state[16] = {};
 	bool retrigger = true;
+	bool release_allup = false;
 	bool bypass = false;
 };
 

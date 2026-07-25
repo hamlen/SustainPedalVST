@@ -1,8 +1,6 @@
 #include "SustainPedal.h"
 #include "SustainPedalController.h"
 
-#include <bit>
-
 #include "public.sdk/source/vst/vstaudioprocessoralgo.h"
 
 #include "pluginterfaces/vst/ivstevents.h"
@@ -85,6 +83,9 @@ tresult PLUGIN_API SustainPedal::setState(IBStream* s)
 	}
 	retrigger = val;
 
+	if (streamer.readBool(val))
+		release_allup = val;
+
 	LOG("SustainPedal::setState exited successfully.\n");
 	return kResultOk;
 }
@@ -94,7 +95,7 @@ tresult PLUGIN_API SustainPedal::getState(IBStream* s)
 	LOG("SustainPedal::getState called.\n");
 
 	IBStreamer streamer(s, kLittleEndian);
-	if (!streamer.writeBool(retrigger))
+	if (!streamer.writeBool(retrigger) || !streamer.writeBool(release_allup))
 	{
 		LOG("SustainPedal::getState failed due to streamer error.\n");
 		return kResultFalse;
@@ -135,7 +136,7 @@ tresult PLUGIN_API SustainPedal::getRoutingInfo(RoutingInfo& inInfo, RoutingInfo
 	}
 }
 
-void SustainPedal::send_note_offs(int32 channel, IEventList* events_out, const uint64 release_mask[2], TQuarterNotes pos, int32 sampleOffset)
+void SustainPedal::send_note_offs(int32 channel, IEventList* events_out, const Bits128& release_mask, TQuarterNotes pos, int32 sampleOffset)
 {
 	Event e_off = {};
 	e_off.type = Event::kNoteOffEvent;
@@ -144,34 +145,25 @@ void SustainPedal::send_note_offs(int32 channel, IEventList* events_out, const u
 	e_off.noteOff.channel = channel;
 	e_off.noteOff.velocity = 64;
 
-	for (uint64 phi = 0; phi <= 1; ++phi)
+	channel_state& s = state[channel];
+	Bits128 rm = release_mask;
+	while (rm)
 	{
-		uint64 rm = release_mask[phi];
-		while (rm)
-		{
-			uint16 pitch = std::bit_width(rm) - 1;
-			const uint64 pmask = 1ULL << pitch;
-			pitch += phi * (sizeof(*release_mask) * 8);
-			rm ^= pmask;
-			e_off.noteOff.pitch = pitch;
-			e_off.flags = (state[channel].last_event_live[phi] & pmask) ? Event::kIsLive : 0;
-			e_off.noteOff.noteId = state[channel].last_event[pitch].noteId;
-			e_off.noteOff.tuning = state[channel].last_event[pitch].tuning;
-			if (events_out)
-				events_out->addEvent(e_off);
-		}
+		uint16 pitch = rm.hibit() - 1;
+		const Bits128 pmask = Bits128(pitch);
+		rm ^= pmask;
+		e_off.noteOff.pitch = pitch;
+		e_off.flags = (s.last_event_live & pmask) ? Event::kIsLive : 0;
+		e_off.noteOff.noteId = s.last_event[pitch].noteId;
+		e_off.noteOff.tuning = s.last_event[pitch].tuning;
+		if (events_out)
+			events_out->addEvent(e_off);
 	}
 
 	if (events_out)
-	{
-		state[channel].release_pending[0] &= ~release_mask[0];
-		state[channel].release_pending[1] &= ~release_mask[1];
-	}
+		s.release_pending &= ~release_mask;
 	else
-	{
-		state[channel].release_pending[0] |= release_mask[0];
-		state[channel].release_pending[1] |= release_mask[1];
-	}
+		s.release_pending |= release_mask;
 }
 
 void SustainPedal::sustain_on(int32 channel, int32 sampleOffset)
@@ -180,10 +172,7 @@ void SustainPedal::sustain_on(int32 channel, int32 sampleOffset)
 	{
 		state[channel].sustain_on = true;
 		if (!bypass)
-		{
-			state[channel].note_sustain[0] = state[channel].note_on[0] | state[channel].note_sostenuto[0];
-			state[channel].note_sustain[1] = state[channel].note_on[1] | state[channel].note_sostenuto[1];
-		}
+			state[channel].note_sustain = state[channel].note_on | state[channel].note_sostenuto;
 	}
 }
 
@@ -196,14 +185,10 @@ void SustainPedal::sustain_off(int32 channel, IEventList* events_out, TQuarterNo
 		if (!state[channel].sostenuto_all)
 #endif
 		{
-			const uint64 release_mask[2] = {
-				state[channel].note_sustain[0] & ~state[channel].note_on[0] & ~state[channel].note_sostenuto[0],
-				state[channel].note_sustain[1] & ~state[channel].note_on[1] & ~state[channel].note_sostenuto[1]
-			};
+			const Bits128 release_mask = state[channel].note_sustain & ~state[channel].note_on & ~state[channel].note_sostenuto;
 			send_note_offs(channel, events_out, release_mask, pos, sampleOffset);
 		}
-		state[channel].note_sustain[0] = 0;
-		state[channel].note_sustain[1] = 0;
+		state[channel].note_sustain.clear();
 	}
 }
 
@@ -216,10 +201,7 @@ void SustainPedal::sostenuto_on(int32 channel, int32 sampleOffset)
 		state[channel].sostenuto_all = state[channel].sustain_on;
 #endif
 		if (!bypass)
-		{
-			state[channel].note_sostenuto[0] = state[channel].note_on[0];
-			state[channel].note_sostenuto[1] = state[channel].note_on[1];
-		}
+			state[channel].note_sostenuto = state[channel].note_on;
 	}
 }
 
@@ -229,18 +211,14 @@ void SustainPedal::sostenuto_off(int32 channel, IEventList* events_out, TQuarter
 	{
 		if (!state[channel].sustain_on)
 		{
-			const uint64 release_mask[2] = {
-				state[channel].note_sostenuto[0] & ~state[channel].note_on[0],
-				state[channel].note_sostenuto[1] & ~state[channel].note_on[1]
-			};
+			const Bits128 release_mask = state[channel].note_sostenuto & ~state[channel].note_on;
 			send_note_offs(channel, events_out, release_mask, pos, sampleOffset);
 		}
 		state[channel].sostenuto_on = false;
 #ifdef SOS_WITH_SUS_SUSTAINS_ALL
 		state[channel].sostenuto_all = false;
 #endif
-		state[channel].note_sostenuto[0] = 0;
-		state[channel].note_sostenuto[1] = 0;
+		state[channel].note_sostenuto.clear();
 	}
 }
 
@@ -260,13 +238,10 @@ void SustainPedal::bypass_on(IEventList* const events_out, ProcessContext* const
 		bypass = true;
 		for (int16 channel = 0; channel < 16; ++channel)
 		{
-			const uint64 release_mask[2] = {
-				(state[channel].note_sustain[0] | state[channel].note_sostenuto[0]) & ~state[channel].note_on[0],
-				(state[channel].note_sustain[1] | state[channel].note_sostenuto[1]) & ~state[channel].note_on[1]
-			};
+			const Bits128 release_mask = (state[channel].note_sustain | state[channel].note_sostenuto) & ~state[channel].note_on;
 			send_note_offs(channel, events_out, release_mask, pos, sampleOffset);
-			state[channel].note_sustain[0] = state[channel].note_sustain[1] = 0;
-			state[channel].note_sostenuto[0] = state[channel].note_sostenuto[1] = 0;
+			state[channel].note_sustain.clear();
+			state[channel].note_sostenuto.clear();
 		}
 	}
 }
@@ -293,16 +268,6 @@ static bool concurrent_event(const uint16 type, IEventList* const q, int32 index
 		}
 	}
 	return false;
-}
-
-static inline void save_event_info(channel_state& s, const uint16 pitch, const uint16 phi, const uint64 pmask, const int32 noteId, const float tuning, const uint16 flags)
-{
-	s.last_event[pitch].noteId = noteId;
-	s.last_event[pitch].tuning = tuning;
-	if (flags & Event::kIsLive)
-		s.last_event_live[phi] |= pmask;
-	else
-		s.last_event_live[phi] &= ~pmask;
 }
 
 tresult PLUGIN_API SustainPedal::process(ProcessData& data)
@@ -360,7 +325,7 @@ tresult PLUGIN_API SustainPedal::process(ProcessData& data)
 		const TQuarterNotes pos = position_of_offset(data.processContext, 0);
 		for (int16 channel = 0; channel < 16; ++channel)
 		{
-			if (state[channel].release_pending[0] || state[channel].release_pending[1])
+			if (state[channel].release_pending)
 			{
 				send_note_offs(channel, events_out, state[channel].release_pending, pos, 0);
 				pending_releases_flushed = true;
@@ -467,6 +432,11 @@ tresult PLUGIN_API SustainPedal::process(ProcessData& data)
 				else
 					bypass = false;
 			}
+			else if (changedParamID == kReleaseMode)
+			{
+				// Release mode can be FirstUp (0) or AllUp (1)
+				release_allup = (value > 0.5);
+			}
 			else
 			{
 				const bool pedal_is_damper = (changedParamID >= kSustain1) && (changedParamID < kSustain1 + 16);
@@ -504,9 +474,9 @@ tresult PLUGIN_API SustainPedal::process(ProcessData& data)
 			{
 				const uint16 channel = (uint16)evt.noteOn.channel % 16;
 				const uint16 pitch = (uint16)evt.noteOn.pitch % 128;
-				const uint16 phi = pitch / 64;
-				const uint64 pmask = 1ULL << (pitch % 64);
-				uint64 sounding = (state[channel].note_on[phi] | state[channel].note_sustain[phi] | state[channel].note_sostenuto[phi]) & pmask;
+				const Bits128 pmask = Bits128(pitch);
+				channel_state& s = state[channel];
+				bool sounding = (s.note_on | s.note_sustain | s.note_sostenuto) & pmask;
 
 				// We "retrigger" a note that is already sounding by inserting a note-off just
 				// before this time offset, and then preserving the note-on.  However, we must
@@ -520,10 +490,10 @@ tresult PLUGIN_API SustainPedal::process(ProcessData& data)
 				if (sounding && retrigger && events_out && (evt.sampleOffset > 0) &&
 					!concurrent_event(Event::kNoteOnEvent, events_out, events_out->getEventCount(), -1, evt.sampleOffset - 1, channel, pitch, numSamples))
 				{
-					state[channel].note_on[phi] &= ~pmask;
-					if (!state[channel].sustain_on)
-						state[channel].note_sustain[phi] &= ~pmask;
-					state[channel].note_sostenuto[phi] &= ~pmask;
+					s.note_on &= ~pmask;
+					if (!s.sustain_on)
+						s.note_sustain &= ~pmask;
+					s.note_sostenuto &= ~pmask;
 
 					Event e_off = evt;
 					e_off.type = Event::kNoteOffEvent;
@@ -532,27 +502,37 @@ tresult PLUGIN_API SustainPedal::process(ProcessData& data)
 					e_off.noteOff.channel = channel;
 					e_off.noteOff.pitch = pitch;
 					e_off.noteOff.velocity = 64;
-					e_off.noteOff.noteId = state[channel].last_event[pitch].noteId;
-					e_off.noteOff.tuning = state[channel].last_event[pitch].tuning;
+					e_off.noteOff.noteId = s.last_event[pitch].noteId;
+					e_off.noteOff.tuning = s.last_event[pitch].tuning;
 					events_out->addEvent(e_off);
-					sounding = 0;
+					sounding = false;
 				}
 
-				if (!sounding && events_out)
+				if (!sounding)
 				{
-					events_out->addEvent(evt);
-					prevOutOffset = evt.sampleOffset;
+					if (events_out)
+					{
+						events_out->addEvent(evt);
+						prevOutOffset = evt.sampleOffset;
+					}
+					s.last_event[pitch].noteId = evt.noteOn.noteId;
+					s.last_event[pitch].tuning = evt.noteOn.tuning;
+					if (evt.flags & Event::kIsLive)
+						s.last_event_live |= Bits128(pitch);
+					else
+						s.last_event_live &= ~Bits128(pitch);
 				}
 
-				state[channel].note_on[phi] |= pmask;
-				save_event_info(state[channel], pitch, phi, pmask, evt.noteOn.noteId, evt.noteOn.tuning, evt.flags);
-				state[channel].release_pending[phi] &= ~pmask;
-				if (state[channel].sustain_on && !bypass)
-					state[channel].note_sustain[phi] |= pmask;
+				s.note_on |= pmask;
+				if (++s.concurrent_noteons[pitch] <= 0)
+					--s.concurrent_noteons[pitch];
+				s.release_pending &= ~pmask;
+				if (s.sustain_on && !bypass)
+					s.note_sustain |= pmask;
 
 #ifdef SOS_WITH_SUS_SUSTAINS_ALL
-				if (state[channel].sostenuto_all)
-					state[channel].note_sostenuto[phi] |= pmask;
+				if (s.sostenuto_all)
+					s.note_sostenuto[phi] |= pmask;
 #endif
 
 				break;
@@ -562,26 +542,30 @@ tresult PLUGIN_API SustainPedal::process(ProcessData& data)
 			{
 				const uint16 channel = (uint16)evt.noteOff.channel % 16;
 				const uint16 pitch = (uint16)evt.noteOff.pitch % 128;
-				const uint16 phi = pitch / 64;
-				const uint64 pmask = 1ULL << (pitch % 64);
+				const Bits128 pmask = Bits128(pitch);
+				channel_state& s = state[channel];
 
-				if (state[channel].note_on[phi] & pmask)
+				if (s.concurrent_noteons[pitch] > 0)
+					--s.concurrent_noteons[pitch];
+
+				if ((s.note_on & pmask) && (!release_allup || !s.concurrent_noteons[pitch]))
 				{
-					save_event_info(state[channel], pitch, phi, pmask, evt.noteOff.noteId, evt.noteOff.tuning, evt.flags);
-					state[channel].note_on[phi] &= ~pmask;
-				}
-				if (!(state[channel].sustain_on || (state[channel].note_sostenuto[phi] & pmask)))
-				{
-					state[channel].note_sustain[phi] &= ~pmask;
-					if (events_out)
+					s.note_on &= ~pmask;
+
+					if (!(s.sustain_on || (s.note_sostenuto & pmask)))
 					{
-						events_out->addEvent(evt);
-						state[channel].release_pending[phi] &= ~pmask;
+						s.note_sustain &= ~pmask;
+						if (events_out)
+						{
+							events_out->addEvent(evt);
+							prevOutOffset = evt.sampleOffset;
+							s.release_pending &= ~pmask;
+						}
+						else
+							s.release_pending |= pmask;
 					}
-					else
-						state[channel].release_pending[phi] |= pmask;
-					prevOutOffset = evt.sampleOffset;
 				}
+
 				break;
 			}
 

@@ -33,6 +33,7 @@ tresult PLUGIN_API SustainPedalController::initialize(FUnknown* context)
 	}
 
 	parameters.addParameter(STR16("Retrigger"), nullptr, 1, 1., ParameterInfo::kCanAutomate, kRetrigger);
+	parameters.addParameter(STR16("Release AllUp"), nullptr, 1, 0., ParameterInfo::kCanAutomate, kReleaseMode);
 
 	addUnit(new Unit(STR16("Sustain Pedals"), kSustainUnitId));
 	addUnit(new Unit(STR16("Sostenuto Pedals"), kSostenutoUnitId));
@@ -100,6 +101,9 @@ tresult PLUGIN_API SustainPedalController::setComponentState(IBStream* state)
 		return kResultFalse;
 	}
 	setParamNormalized(kRetrigger, val ? 1. : 0.);
+
+	if (streamer.readBool(val))
+		setParamNormalized(kReleaseMode, val ? 1. : 0.);
 
 	LOG("SustainPedalController::setComponentState exited normally.\n");
 	return kResultOk;
